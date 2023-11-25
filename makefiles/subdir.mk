@@ -43,6 +43,12 @@ endif
 all: $(OBJECTS)
 
 clean:
-	@$(RM) *.o *.s *.ld *.d
+	@$(RM) *.o *.s *.ld *.d src/formats/pdf/parseDefaultCharName.h
 
 -include *.d
+
+PdfDefaultCharMap.o: PdfDefaultCharMap.cpp PdfDefaultCharMap.h parseDefaultCharName.h
+	$(CC) -c $<
+
+parseDefaultCharName.h: PdfDefaultCharMapMap.cpp
+	python3 ./generate-state-table > tmp && mv tmp parseDefaultCharName.h

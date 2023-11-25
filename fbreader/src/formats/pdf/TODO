@@ -1,0 +1,5 @@
+/epsilon1 U+03B5 ? or U+025B (!) or U+0190.
+PdfDefaultCharMap: entry not found: arrowdblext (extension for double arrows)
+use PdfMatrix, remove all the ad-hoc kludges.
+In a font, read /DescendantFonts (array) and use (one of) it if possible. For type0 fonts, descendantfont count is limited to 1. Especially read "/W".
+ignore unknown stuff between BX and EX.

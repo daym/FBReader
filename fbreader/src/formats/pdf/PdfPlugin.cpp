@@ -17,6 +17,7 @@
  * 02110-1301, USA.
  */
 
+#include <string.h>
 #include <ZLFile.h>
 #include <ZLInputStream.h>
 
@@ -24,15 +25,25 @@
 #include "PdfDescriptionReader.h"
 #include "PdfBookReader.h"
 #include "../../library/Book.h"
+#include "../../bookmodel/BookModel.h"
 
 bool PdfPlugin::acceptsFile(const ZLFile &file) const {
-	return file.extension() == "pdf";
+	if(file.extension() == "pdf")
+		return true;
+	shared_ptr<ZLInputStream> inputStream = file.inputStream();
+	if(inputStream.isNull() || !inputStream->open())
+		return false;
+	char buffer[5];
+	if(inputStream->read(buffer, 5) < 5)
+		return false;
+	return (memcmp(buffer, "%PDF-", 5) == 0);
 }
 
 bool PdfPlugin::readMetaInfo(Book &book) const {
-	return PdfDescriptionReader(book).readMetaInfo(ZLFile(path).inputStream());
+	return PdfDescriptionReader(book).readMetaInfo(book.file().inputStream());
 }
 
 bool PdfPlugin::readModel(BookModel &model) const {
-	return PdfBookReader(model).readBook(ZLFile(book.fileName()).inputStream());
+	const Book &book = *model.book();
+	return PdfBookReader(model).readBook(book.file().inputStream());
 }

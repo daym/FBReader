@@ -23,19 +23,17 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <list>
 
 #include <shared_ptr.h>
+#include "PdfParser.h"
 
 class ZLInputStream;
 
 class PdfObject {
 
 public:
-	static shared_ptr<PdfObject> readObject(ZLInputStream &stream, char &ch);
-	static void readToken(ZLInputStream &stream, std::string &buffer, char &ch);
-
-protected:
-	static void skipWhiteSpaces(ZLInputStream &stream, char &ch);
+	//static shared_ptr<PdfObject> readObject(ZLInputStream &stream, char &ch);
 
 public:
 	enum Type {
@@ -48,7 +46,9 @@ public:
 		DICTIONARY,
 		STREAM,
 		NIL,
-		REFERENCE
+		REFERENCE,
+		INSTRUCTION, /* FIXME do we want an ADT node type or just an array with the instruction data instead? */
+		CONTENT,
 	};
 
 	virtual ~PdfObject();
@@ -93,9 +93,27 @@ private:
 	const int myValue;
 };
 
-class PdfStringObject : public PdfObject {
+class PdfRealObject : public PdfObject {
+
+public:
+	static shared_ptr<PdfObject> realObject(double value);
 
 private:
+	PdfRealObject(double value);
+
+public:
+	double value() const;
+
+private:
+	Type type() const;
+
+private:
+	const double myValue;
+};
+
+class PdfStringObject : public PdfObject {
+
+public:
 	PdfStringObject(const std::string &value);
 
 private:
@@ -103,21 +121,26 @@ private:
 
 private:
 	std::string myValue;
+public:
+	std::string value() { return myValue; }
 
-friend shared_ptr<PdfObject> PdfObject::readObject(ZLInputStream &stream, char &ch);
+friend shared_ptr<PdfObject> PdfParser::readObject(shared_ptr<ZLInputStream>);
 };
 
 class PdfNameObject : public PdfObject {
-
+private:
+	std::string fID;
 public:
 	static shared_ptr<PdfObject> nameObject(const std::string &id);
-
+	std::string id() const { return fID; }
+	
 private:
 	static std::map<std::string,shared_ptr<PdfObject> > ourObjectMap;
 
 private:
-	PdfNameObject();
-
+	PdfNameObject(const std::string& id);
+	PdfNameObject(const PdfNameObject& source); /* not defined */
+	PdfNameObject& operator=(const PdfNameObject& source); /* not defined */
 private:
 	Type type() const;
 };
@@ -130,7 +153,10 @@ private:
 
 public:
 	shared_ptr<PdfObject> operator [] (shared_ptr<PdfObject> id) const;
+	shared_ptr<PdfObject>& operator [] (shared_ptr<PdfObject> id);
 	shared_ptr<PdfObject> operator [] (const std::string &id) const;
+	std::list<shared_ptr<PdfObject> > keys() const;
+	void dump() const;
 
 private:
 	Type type() const;
@@ -138,40 +164,42 @@ private:
 private:
 	std::map<shared_ptr<PdfObject>,shared_ptr<PdfObject> > myMap;
 
-friend shared_ptr<PdfObject> PdfObject::readObject(ZLInputStream &stream, char &ch);
+friend shared_ptr<PdfObject> PdfParser::readObject(shared_ptr<ZLInputStream>);
 };
 
 class PdfStreamObject : public PdfObject {
-
 private:
-	PdfStreamObject(const PdfDictionaryObject &dictionary, ZLInputStream &dataStream);
+	void processDecompressor(shared_ptr<PdfObject> filter, ZLInputStream& originalStream);
+	void processDecompressorChain(shared_ptr<PdfObject>& filters, ZLInputStream& originalStream);
+private:
+	PdfStreamObject(shared_ptr<PdfObject> dictionary, ZLInputStream& dataStream, char& ch, size_t size);
 
 private:
 	Type type() const;
-
+public:
+	shared_ptr<ZLInputStream> stream() const;
+	shared_ptr<PdfObject> dictionary() const;
+	void setDictionary(shared_ptr<PdfObject> value);
+	void dump();
 private:
 	std::string myData;
-	/*
-	enum EncodingType {
-		UNKNOWN,
-		FLATE,
-	};
-	std::vector<EncodingType> myFilters;
-	*/
+	size_t mySize;
+	shared_ptr<PdfObject> myDictionary;
 
-friend shared_ptr<PdfObject> PdfObject::readObject(ZLInputStream &stream, char &ch);
+friend shared_ptr<PdfObject> PdfParser::readObject(shared_ptr<ZLInputStream>);
 };
 
 class PdfArrayObject : public PdfObject {
 
 private:
-	PdfArrayObject();
-	void addObject(shared_ptr<PdfObject> object);
 	shared_ptr<PdfObject> popLast();
 
 public:
+	void addObject(shared_ptr<PdfObject> object);
+	PdfArrayObject();
 	int size() const;
 	shared_ptr<PdfObject> operator [] (int index) const;
+	shared_ptr<PdfObject>& operator [] (int index);
 
 private:
 	Type type() const;
@@ -179,7 +207,7 @@ private:
 private:
 	std::vector<shared_ptr<PdfObject> > myVector;
 
-friend shared_ptr<PdfObject> PdfObject::readObject(ZLInputStream &stream, char &ch);
+friend shared_ptr<PdfObject> PdfParser::readObject(shared_ptr<ZLInputStream>);
 };
 
 class PdfObjectReference : public PdfObject {
@@ -197,5 +225,31 @@ private:
 	const int myNumber;
 	const int myGeneration;
 };
+
+/* helpers */
+
+static inline bool integerFromPdfObject(const shared_ptr<PdfObject>& item, int& a) {
+	if(!item.isNull() && item->type() == PdfObject::INTEGER_NUMBER) {
+		a = ((PdfIntegerObject&)*item).value();
+		return true;
+	} else
+		return false;
+}
+
+static inline bool doubleFromPdfObject(const shared_ptr<PdfObject>& item, double& a) {
+	if(item.isNull())
+		return false;
+	if(item->type() == PdfObject::REAL_NUMBER) {
+		a = ((PdfRealObject&)*item).value();
+		return true;
+	} else {
+		int b;
+		if(integerFromPdfObject(item, b)) {
+			a = b;
+			return true;
+		} else
+			return false;
+	}
+}
 
 #endif /* __PDFOBJECT_H__ */

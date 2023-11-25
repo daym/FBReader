@@ -1,0 +1,23 @@
+Td
+	T_m = T_lm = makePdfMatrixFromTranslation()
+TD
+	-ty TL
+	tx ty Td
+Tm
+	T_m = T_lm = makePdfMatrixFromItems(a, b, 0.0, c, d, 0.0, e, f, 1.0)
+T*
+	0 -Tl Td
+string '
+	T*
+	string Tj
+aw ac string "
+	aw Tw
+	ac Tc
+	string '
+array TJ
+after drawing a glyph:
+	let w0 w1 glyph displacement
+	either t_x = ((w0 - T_j/1000)⋅T_{font_size}+T_c+T_w)⋅T_{horizontal_scaling}
+	or t_y = ((w1 - T_j/1000)⋅T_{font_size}+T_c+T_w)
+	then translate the text matrix.
+

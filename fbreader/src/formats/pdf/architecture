@@ -1,0 +1,105 @@
+The goal of the PDF format parser is to find all the text content and add it to the FBReader model via addData("<text>");
+
+It's best to understand this document by examining an example PDF file using a text editor (that doesn't support PDF). You can usually search for parts that are quoted here over there and find what we are talking about.
+
+First a few words about the PDF data types (see "PdfObject.h" for the actual ones (important file!)):
+The PDF file uses values which can be assigned the following data types:
+  PdfBooleanObject    either "true" or "false".
+  PdfIntegerObject    integer numeric value.
+  PdfRealObject       numeric value of the real numbers. Search for ".".
+  PdfStringObject     actual text string. Search for "(".
+  PdfNameObject       a unique symbol for tokens like "/Root" in the original PDF. Note that in this case the PdfNameObject contains "Root" as id() (without slash). The uniqueness means you can check for equality by pointer comparison which is faster than string comparison.
+  PdfDictionaryObject a dictionary of attributes (of an object, usually). Search for "<<".
+  PdfStreamObject     a stream of data (like an image, text, ...). Search for "stream". This provides access to its dictionary object as well (these come before the word "stream" in the original PDF).
+  PdfArrayObject      array of values ("[1 2 3 4]").
+  PdfObjectReference  reference to another pdf object (like "1501 0 R" refers to object defined by "1501 0 obj").
+These are all derived from PdfObject because PDF uses an argument-stack-based instruction layout:
+  /T1 1 Tf                        # means setFont(PdfNameObject::nameObject("T1"), 1);
+  [234 (Hello) 11 (world)] TJ     # means advance 234, print "Hello", advance 11, print "world".
+Note that the parameters can be supplied by argument values having any type (even in arrays).
+
+Registration of the PDF plugin is in file "PdfPlugin.cpp".
+The main entry point is the function PdfBookReader::readBook (in file "PdfBookReader.cpp", as is the normal convention in the entire PDF parser).
+
+All the following methods until further notice are in PdfBookReader.
+
+A PDF file contains one (or more) table of object positions at the END.
+Right before the end of the file, there's the word "startxref" which is followed by the absolute byte offset into the file where the object table starts.
+The object table contains where all the objects are and an attribute dictionary after the word "trailer".
+This dictionary contains a Name "/Prev" to find the "previous" object [position] table, if any.
+I think this splitting of tables has been done to make the PDF faster to display (can start to display the first page earlier), but not sure.
+
+In any case, readBook calls readReferenceTable to load this table and find the "/Root" object which is where the actual content will be stored (well, in subnodes).
+The value of the Name "/Pages" in the dictionary is the most interesting one, because it contains all the page data (in subnodes).
+So processPages is called to process these.
+
+processPages checks whether its an object of "/Type" "/Pages", if so:
+  finds all the "/Kids" and recursively calls itself.
+if not: 
+  calls processPage.
+
+processPage finds the dictionary values with Names "/Resources" and "/Contents".
+"/Resources" are fonts etc, it remembers those.
+The "/Contents" is where all the text resides in, so processContents is called with it (note the object is a PdfStreamObject).
+Control eventually is given to "PdfContent::parse" to parse that stream.
+
+All the following methods until further notice are in PdfContent.
+
+First, an example PdfContent source stream:
+-----
+-0.002 Tc 
+[(ISBN)-222(3-540-20210-2)]TJ
+/F2 1 Tf  
+0 -2.031 TD
+-0.0018 Tc
+[(ISBN)-222(3-540-21473-9)]TJ
+-----
+
+So the format is quite similar to the main PDF format, but simpler. There can be no substreams or dictionaries.
+The PdfContent parser reads this file and remembers all the instructions. One can later access them via the method "instructions" (in PdfContent).
+Note that an instruction with operator==opBeginText will contain an array of subinstructions (which can contain an operator opBeginText which ...) which are to be processed (partly) within their own temporary variable environment. The PDF operator for this is called "BT", if you want to look it up.
+
+In any case, eventually it's done parsing and control returns to PdfBookReader, specifically PdfBookReader::processInstructions.
+This will call PdfBookReader::processInstruction.
+
+All the following methods until further notice are in PdfBookReader.
+
+Note that all the content text is encoded in some 8-bit encoding which we don't a priori know what it is.
+PDF is actually a printing format so it didn't make much sense in the beginning to include easy-to-find character codes at all.
+Nowadays, these are included in PDFs that are searchable (you wouldn't want to draw the glyphs using the mouse to find them, would you?).
+Also, there is a table that is used for referring to glyphs of built-in Postscript fonts of printers sometimes. This one is actually standardized (yeah, right):
+See file "parseDefaultCharName.h" for a parser for them. It will return the unicode codepoint for one of those.
+
+"PdfDefaultCharMap.cpp" is the interface for getting at the Postscript default names.
+"PdfDefaultCharMapMap.cpp" is an old version that uses a dictionary. I actually wanted to do it this way (even though it's slower) because it would be more maintainable, but unfortunately GCC will use 100% CPU and then eat up 1GB RAM trying to compile it and then die (in scratchbox). Fun.
+
+"PdfDescriptionReader.cpp": Dummy.
+
+The class PdfScanner is the base class for my parsers (there's no reason that the main PdfObject parser doesn't use this as well - except laziness).
+All parsers are recursive descent parsers with 1 (8-bit) char lookahead.
+The PdfScanner::consume will consume the current lookahead and read the next character from the file (and set it as the new lookahead).
+The PdfScanner::input is the current lookahead char.
+
+= How to make sense of text =
+
+As explained above, the text itself doesn't use an encoding that is known a priori, so we have to get our hands on one defined within the PDF file.
+
+see PdfBookReader::convertStringToUnicode for how:
+  It calls PdfToUnicodeMap::nextUnicodeCodepoint repeatedly with parts of the text to get back one unicode codepoint after another.
+  By this, it eventually reconstructs the unicode string we should display (note in C++ that is UTF-8 encoded because that's standard in UNIX and FBReader and GNOME and half the internet and so on).
+
+PdfBookReader::setFont is called when the PDF font is switched (not that we support different font glyphs in FBReader, but remember, the encoding used for PDF text can change at a whim).
+Because of the real PDF files in the wild, this is done by convoluted steps (sigh):
+PdfBookReader::loadFonts prepares a fToUnicodeTablesByName entry for the respective fonts, by:
+  - try to find a font with the same pdf object ID (address), if found, use that.
+  - load new fonts by PdfBookReader::loadFont.
+
+PdfBookReader::loadFont parses the "/Encoding" table (see PdfBookReader::parseEncoding).
+Then it parses the "/ToUnicode" (if present) and, as a last resort, the "/FontFile" itself (or parts of it...).
+
+PdfToUnicodeMap <-- data class.
+PdfToUnicodeParser <-- parser for "/ToUnicode" value.
+PdfType1FontFileParser <-- parser for "/FontFile" value.
+PdfBookReader::parseEncoding <-- parser for "/Encoding" value.
+
+PdfImage tries to load images embedded in the PDF (well, at least JPEG).
