@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+
+import re
+re_not_normal = re.compile(r"[^a-zA-Z]")
+
+def load_chars():
+	chars = {}
+	for line in open("PdfDefaultCharMapMap.cpp").readlines():
+		if not line.startswith("\tchars["):
+			continue
+		name, value = line.split("//")[0].split("=")
+		name = name.replace("\tchars[\"", "").replace("\"]", "").strip()
+		assert(not re_not_normal.match(name))
+		value = eval(value.replace(";", ""))
+		assert(isinstance(value, int))
+		chars[name] = value
+	return chars
+
+chars = load_chars()
+
+class Node(object):
+	def __init__(self):
+		self.children = {}
+		self.result = None
+
+root = Node()
+
+def add_entry(text, result):
+	node = root
+	for c in text:
+		if c not in node.children:
+			node.children[c] = Node()
+		node = node.children[c]
+	node.result = result
+
+def sorted(l): # for older Python versions.
+	c = [i for i in l]
+	c.sort()
+	return(c)
+
+keys = sorted(chars.keys())
+for key in keys:
+	assert(key.find("\0") == -1)
+	add_entry(key + "\0", chars[key])
+
+def dumpParser(node, IO_1, indentation = 1):
+	i = indentation * "\t"
+	IO_1.write(i + "switch(*inputString) {\n")
+	for k in sorted(node.children.keys()):
+		v = node.children[k]
+		IO_1.write(i + "case %r:\n" % (k, ))
+		IO_1.write(i + "\t++inputString;\n")
+		dumpParser(v, IO_1, indentation + 1)
+		IO_1.write(i + "\tbreak;\n")
+	IO_1.write(i + "default:\n")
+	IO_1.write(i + "\treturn 0x%04X;\n" % (node.result or 0))
+	IO_1.write(i + "}\n")
+
+try:
+	import StringIO
+	IO_1 = StringIO.StringIO()
+except ImportError:
+	import io
+	IO_1 = io.StringIO()
+print("static unsigned int parseDefaultCharName(const char*& inputString) {")
+dumpParser(root, IO_1)
+print(IO_1.getvalue())
+print("}")

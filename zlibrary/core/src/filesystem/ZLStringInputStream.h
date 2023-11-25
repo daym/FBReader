@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2010 Geometer Plus <contact@geometerplus.com>
+ * Copyright (C) 2008-2010 Geometer Plus <contact@geometerplus.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,29 +17,31 @@
  * 02110-1301, USA.
  */
 
-#ifndef __ZLZDECOMPRESSOR_H__
-#define __ZLZDECOMPRESSOR_H__
+#ifndef __ZLSTRINGINPUTSTREAM_H__
+#define __ZLSTRINGINPUTSTREAM_H__
 
-#include <zlib.h>
+#include <ZLInputStream.h>
 
-#include <string>
-
-class ZLInputStream;
-
-class ZLZDecompressor {
+class ZLStringInputStream : public ZLInputStream {
 
 public:
-	ZLZDecompressor(size_t size, bool useHeader = false);
-	~ZLZDecompressor();
+	ZLStringInputStream(const std::string &data);
 
-	size_t decompress(ZLInputStream &stream, char *buffer, size_t maxSize);
+public:
+	bool open();
+	size_t read(char *buffer, size_t maxSize);
+	void close();
+
+	void seek(int offset, bool absoluteOffset);
+	size_t offset() const;
+	size_t sizeOfOpened();
 
 private:
-	z_stream *myZStream;
-	size_t myAvailableSize;
-	char *myInBuffer;
-	char *myOutBuffer;
-	std::string myBuffer;
+	std::string myData;
+	size_t myOffset;
+	// disable copy constructor:
+	ZLStringInputStream(const ZLStringInputStream&);
+	ZLStringInputStream& operator=(const ZLStringInputStream& );
 };
 
-#endif /* __ZLZDECOMPRESSOR_H__ */
+#endif /* __ZLSTRINGINPUTSTREAM_H__ */

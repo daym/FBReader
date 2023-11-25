@@ -17,39 +17,31 @@
  * 02110-1301, USA.
  */
 
-#include <algorithm>
+#ifndef __ZLSTRINGINPUTSTREAM_H__
+#define __ZLSTRINGINPUTSTREAM_H__
 
-#include "StringStream.h"
+#include <ZLInputStream.h>
 
-StringStream::StringStream(const std::string &data) : myData(data), myOffset(0) {
-}
+class ZLStringInputStream : public ZLInputStream {
 
-bool StringStream::open() {
-	myOffset = 0;
-	return true;
-}
+public:
+	ZLStringInputStream(const std::string &data);
 
-size_t StringStream::read(char *buffer, size_t maxSize) {
-	size_t size = std::min(maxSize, myData.length() - myOffset);
-	memcpy(buffer, myData.data() + myOffset, size);
-	myOffset += size;
-	return size;
-}
+public:
+	bool open();
+	size_t read(char *buffer, size_t maxSize);
+	void close();
 
-void StringStream::close() {
-}
+	void seek(int offset, bool absoluteOffset);
+	size_t offset() const;
+	size_t sizeOfOpened();
 
-void StringStream::seek(int offset, bool absoluteOffset) {
-	if (!absoluteOffset) {
-		offset += myOffset;
-	}
-	myOffset = std::min((size_t)std::max(0, offset), myData.length());
-}
+private:
+	std::string myData;
+	size_t myOffset;
+	// disable copy constructor:
+	ZLStringInputStream(const ZLStringInputStream&);
+	ZLStringInputStream& operator=(const ZLStringInputStream& );
+};
 
-size_t StringStream::offset() const {
-	return myOffset;
-}
-
-size_t StringStream::sizeOfOpened() {
-	return myData.length();
-}
+#endif /* __ZLSTRINGINPUTSTREAM_H__ */

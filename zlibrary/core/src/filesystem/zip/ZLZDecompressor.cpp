@@ -18,7 +18,7 @@
  */
 
 #include <string.h>
-
+#include <iostream>
 #include <algorithm>
 
 #include "../ZLInputStream.h"
@@ -27,10 +27,13 @@
 const size_t IN_BUFFER_SIZE = 2048;
 const size_t OUT_BUFFER_SIZE = 32768;
 
-ZLZDecompressor::ZLZDecompressor(size_t size) : myAvailableSize(size) {
+ZLZDecompressor::ZLZDecompressor(size_t size, bool useHeader) : myAvailableSize(size) {
 	myZStream = new z_stream;
 	memset(myZStream, 0, sizeof(z_stream));
-	inflateInit2(myZStream, -MAX_WBITS);
+	if(useHeader)
+		inflateInit2(myZStream, MAX_WBITS);
+	else
+		inflateInit2(myZStream, -MAX_WBITS);
 
 	myInBuffer = new char[IN_BUFFER_SIZE];
 	myOutBuffer = new char[OUT_BUFFER_SIZE];
